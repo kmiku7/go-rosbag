@@ -1,4 +1,4 @@
-package rosbag
+package go_rosbag
 
 import (
 	"errors"

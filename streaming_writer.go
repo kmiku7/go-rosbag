@@ -1,4 +1,4 @@
-package rosbag
+package go_rosbag
 
 import (
 	"bytes"
@@ -26,7 +26,7 @@ type BagFileStreamingWriter struct {
 	allConnectionInfo     map[uint32]*RosTopicClassType
 }
 
-func NewBagFileWriter(
+func NewBagFileStreamingWriter(
 	file io.Writer, compressionMethod CompressionMethodType,
 ) (writer *BagFileStreamingWriter, err error) {
 
