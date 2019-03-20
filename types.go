@@ -5,7 +5,6 @@ import (
 	"math"
 )
 
-type RecordKeyType string
 type OpCodeType uint8
 
 const (
@@ -24,27 +23,27 @@ const (
 	OpChunkInfo  OpCodeType = 0x06
 	OpConnection OpCodeType = 0x07
 
-	KeyOp RecordKeyType = "op"
+	KeyOp string = "op"
 
-	KeyTopic             RecordKeyType = "topic"
-	KeyMessageType       RecordKeyType = "type"
-	KeyMD5SUM            RecordKeyType = "md5sum"
-	KeyMessageDefinition RecordKeyType = "message_definition"
+	KeyTopic             string = "topic"
+	KeyMessageType       string = "type"
+	KeyMD5SUM            string = "md5sum"
+	KeyMessageDefinition string = "message_definition"
 
-	KeyIndexPosition   RecordKeyType = "index_pos"
-	KeyConnectionID    RecordKeyType = "conn"
-	KeyConnectionCount RecordKeyType = "conn_count"
-	KeyChunkCount      RecordKeyType = "chunk_count"
-	KeyChunkPosition   RecordKeyType = "chunk_pos"
+	KeyIndexPosition   string = "index_pos"
+	KeyConnectionID    string = "conn"
+	KeyConnectionCount string = "conn_count"
+	KeyChunkCount      string = "chunk_count"
+	KeyChunkPosition   string = "chunk_pos"
 
-	KeyTime      RecordKeyType = "time"
-	KeyStartTime RecordKeyType = "start_time"
-	KeyEndTime   RecordKeyType = "end_time"
+	KeyTime      string = "time"
+	KeyStartTime string = "start_time"
+	KeyEndTime   string = "end_time"
 
-	KeyCompressionMethod RecordKeyType = "compression"
-	KeySize              RecordKeyType = "size"
-	KeyVersion           RecordKeyType = "ver"
-	KeyCount             RecordKeyType = "count"
+	KeyCompressionMethod string = "compression"
+	KeySize              string = "size"
+	KeyVersion           string = "ver"
+	KeyCount             string = "count"
 )
 
 var (
