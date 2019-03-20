@@ -141,6 +141,7 @@ func (w *BagFileStreamingWriter) OpenChunk(
 	if w.chunkOpened {
 		return ErrorChunkOpened
 	}
+	w.chunkOpened = true
 	w.chunkCompressedSize = 0
 	w.chunkUncompressedSize = 0
 	w.chunkInfo = NewChunkInfo()
@@ -318,7 +319,10 @@ func (w *BagFileStreamingWriter) FinishWrite() (err error) {
 	if w.chunkOpened {
 		return ErrorChunkOpened
 	}
-
+	if w.writeFinished {
+		return ErrorWriterFinished
+	}
+	w.writeFinished = true
 	for connectionId, topicClass := range w.allConnectionInfo {
 		_, err = w.writeConnectionRecord(connectionId, topicClass)
 		if err != nil {
