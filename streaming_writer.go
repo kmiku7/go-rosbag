@@ -118,7 +118,7 @@ func (w *BagFileStreamingWriter) writeChunkHeader(
 
 	header, err := NewRecordHeader(
 		KeyOp, OpChunk,
-		KeyCompressionMethod, w.compressionMethod,
+		KeyCompressionMethod, []byte(w.compressionMethod),
 		KeySize, uncompressedSize)
 	if err != nil {
 		return
@@ -161,7 +161,7 @@ func (w *BagFileStreamingWriter) writeConnectionRecord(
 ) (writeLength int, err error) {
 	headerHeader, err := NewRecordHeader(
 		KeyOp, OpConnection,
-		KeyTopic, topicClass.Topic,
+		KeyTopic, []byte(topicClass.Topic),
 		KeyConnectionID, connectionId,
 	)
 	if err != nil {
@@ -174,10 +174,10 @@ func (w *BagFileStreamingWriter) writeConnectionRecord(
 	}
 
 	bodyHeader, err := NewRecordHeader(
-		KeyTopic, topicClass.Topic,
-		KeyMessageType, topicClass.TypeName,
-		KeyMD5SUM, topicClass.Md5sum,
-		KeyMessageDefinition, topicClass.Definition,
+		KeyTopic, []byte(topicClass.Topic),
+		KeyMessageType, []byte(topicClass.TypeName),
+		KeyMD5SUM, []byte(topicClass.Md5sum),
+		KeyMessageDefinition, []byte(topicClass.Definition),
 	)
 	if err != nil {
 		return

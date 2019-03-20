@@ -5,8 +5,6 @@ import (
 	"math"
 )
 
-type OpCodeType uint8
-
 const (
 	VersionV20 string = "#ROSBAG V2.0"
 
@@ -15,13 +13,13 @@ const (
 	IndexVersion      uint32 = 1
 	ChunkIndexVersion uint32 = 1
 
-	OpMsgDef     OpCodeType = 0x01
-	OpMsgData    OpCodeType = 0x02
-	OpFileHeader OpCodeType = 0x03
-	OpIndexData  OpCodeType = 0x04
-	OpChunk      OpCodeType = 0x05
-	OpChunkInfo  OpCodeType = 0x06
-	OpConnection OpCodeType = 0x07
+	OpMsgDef     uint8 = 0x01
+	OpMsgData    uint8 = 0x02
+	OpFileHeader uint8 = 0x03
+	OpIndexData  uint8 = 0x04
+	OpChunk      uint8 = 0x05
+	OpChunkInfo  uint8 = 0x06
+	OpConnection uint8 = 0x07
 
 	KeyOp string = "op"
 
