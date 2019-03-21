@@ -1,4 +1,4 @@
-package go_rosbag
+package rosbag
 
 import (
 	"errors"
@@ -45,16 +45,16 @@ const (
 )
 
 var (
-	ErrorVersionWrited    = errors.New("File version was writed.")
-	ErrorVersionNotWrited = errors.New("File Version is not writed.")
-	ErrorHeaderWrited     = errors.New("File header was writed.")
-	ErrorHeaderNotWrited  = errors.New("File header is not writed.")
-	ErrorChunkOpened      = errors.New("Chunk has opened.")
-	ErrorChunkNotOpened   = errors.New("Chunk has not opened.")
+	ErrorVersionWrited    = errors.New("file version was writed")
+	ErrorVersionNotWrited = errors.New("file Version is not writed")
+	ErrorHeaderWrited     = errors.New("file header was writed")
+	ErrorHeaderNotWrited  = errors.New("file header is not writed")
+	ErrorChunkOpened      = errors.New("chunk has opened")
+	ErrorChunkNotOpened   = errors.New("chunk has not opened")
 
-	ErrorWriterFinished = errors.New("Writer was finished.")
+	ErrorWriterFinished = errors.New("writer was finished")
 
-	ErrorInvalidArgumentCount = errors.New("Invalid argument count.")
+	ErrorInvalidArgumentCount = errors.New("invalid argument count")
 )
 
 type RecordHeaderType map[string]interface{}

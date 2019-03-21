@@ -1,11 +1,11 @@
-package go_rosbag
+package rosbag
 
 import (
 	"errors"
 )
 
 var (
-	ErrorInvalidCompressionMethod = errors.New("Support: 'none'.")
+	ErrorInvalidCompressionMethod = errors.New("only support 'none' method")
 )
 
 type CompressionMethodType string

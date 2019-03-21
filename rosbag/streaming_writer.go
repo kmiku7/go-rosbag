@@ -1,4 +1,4 @@
-package go_rosbag
+package rosbag
 
 import (
 	"bytes"
