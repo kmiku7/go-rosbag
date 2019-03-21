@@ -1,2 +1,2 @@
-# go_rosbag
+# go-rosbag
 go-binding of rosbag
