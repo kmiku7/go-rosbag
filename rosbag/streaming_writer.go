@@ -306,35 +306,48 @@ func (w *BagFileStreamingWriter) WriteRawMessage(
 		w.chunkUncompressedSize += uint32(uncompressedSize)
 	}
 
-	w.updateChunkInfo(connectionId, timestampNs, w.chunkCompressedSize)
+	w.updateChunkInfo(connectionId, timestampNs, w.chunkUncompressedSize)
 	// TODO: do not support compression now.
 	msgHeader, err := NewRecordHeader(
 		KeyOp, OpMsgData,
 		KeyConnectionID, connectionId,
 		KeyTime, packTimeInV200(timestampNs),
 	)
-	var buffer bytes.Buffer
+	var headerBuffer bytes.Buffer
 	// writeLength, err = writeRecord(w.file, msgHeader, compressedMessageBody, 0)
-	headerLen, err := writeHeader(&buffer, msgHeader)
+	headerLen, err := writeHeader(&headerBuffer, msgHeader)
 	if err != nil {
 		return
 	}
-	if headerLen != buffer.Len() {
+	if headerLen != headerBuffer.Len() {
 		panic("buffer len not equal to message function len.")
 	}
-	err = binary.Write(w.file, binary.LittleEndian, uint32(headerLen)|0x80000000)
-	if err != nil {
-		panic(err)
-	}
-	w.file.Write(buffer.Bytes())
-	if originalSize == 0 {
 
-		bodyLen := uint32(len(compressedMessageBody)) + 4
-		err = binary.Write(w.file, binary.LittleEndian, bodyLen)
+	// err = binary.Write(w.file, binary.LittleEndian, uint32(headerLen)|0x80000000)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// w.file.Write(buffer.Bytes())
+
+	if originalSize == 0 {
+		// uncompressed
+
+		dataLen := uint32(len(compressedMessageBody))
+		err = binary.Write(&headerBuffer, binary.LittleEndian, dataLen)
 		if err != nil {
 			panic(err)
 		}
-		err = binary.Write(w.file, binary.LittleEndian, uint32(len(compressedMessageBody))|0x80000000)
+
+		err = binary.Write(w.file, binary.LittleEndian, uint32(headerBuffer.Len())|0x80000000)
+		if err != nil {
+			panic(err)
+		}
+		_, err = w.file.Write(headerBuffer.Bytes())
+		if err != nil {
+			panic(err)
+		}
+
+		err = binary.Write(w.file, binary.LittleEndian, dataLen|0x80000000)
 		if err != nil {
 			panic(err)
 		}
@@ -343,13 +356,26 @@ func (w *BagFileStreamingWriter) WriteRawMessage(
 			panic(err)
 		}
 
-		uncompressedSize := uint32(headerLen) + bodyLen
-		compressedSize := uint32(headerLen) + 4 + bodyLen + 4
+		uncompressedSize := uint32(headerBuffer.Len()) + dataLen
+		compressedSize := uncompressedSize + 4 + 4
+
 		// w.updateChunkLength(writeLength)
 		w.chunkCompressedSize += uint32(compressedSize)
 		w.chunkUncompressedSize += uint32(uncompressedSize)
 	} else {
-		err = binary.Write(w.file, binary.LittleEndian, uint32(len(compressedMessageBody)))
+		// compressed
+
+		dataLen := uint32(originalSize)
+		err = binary.Write(&headerBuffer, binary.LittleEndian, dataLen)
+		if err != nil {
+			panic(err)
+		}
+
+		err = binary.Write(w.file, binary.LittleEndian, uint32(headerBuffer.Len())|0x80000000)
+		if err != nil {
+			panic(err)
+		}
+		_, err = w.file.Write(headerBuffer.Bytes())
 		if err != nil {
 			panic(err)
 		}
@@ -358,13 +384,14 @@ func (w *BagFileStreamingWriter) WriteRawMessage(
 		if err != nil {
 			panic(err)
 		}
-		_, err := writeSized(w.file, compressedMessageBody[4:])
+		_, err = w.file.Write(compressedMessageBody[4:])
 		if err != nil {
 			panic(err)
 		}
 
-		uncompressedSize := uint32(headerLen) + originalSize
-		compressedSize := headerLen + 4 + len(compressedMessageBody) + 4
+		uncompressedSize := uint32(headerBuffer.Len()) + dataLen
+		compressedSize := uint32(headerBuffer.Len()) + 4 + uint32(len(compressedMessageBody))
+
 		// w.updateChunkLength(writeLength)
 		w.chunkCompressedSize += uint32(compressedSize)
 		w.chunkUncompressedSize += uint32(uncompressedSize)
