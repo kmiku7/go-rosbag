@@ -30,7 +30,7 @@ func NewBagFileStreamingWriter(
 	file io.Writer, compressionMethod CompressionMethodType,
 ) (writer *BagFileStreamingWriter, err error) {
 
-	if compressionMethod != CompressionNone {
+	if !(compressionMethod == CompressionNone || compressionMethod == CompressionLZ4) {
 		return nil, ErrorInvalidCompressionMethod
 	}
 	compressor, err := NewCompressor(compressionMethod)
@@ -127,7 +127,7 @@ func (w *BagFileStreamingWriter) writeChunkHeader(
 	if err != nil {
 		return
 	}
-	binary.Write(w.file, binary.LittleEndian, compressedSize)
+	err = binary.Write(w.file, binary.LittleEndian, compressedSize)
 	return
 }
 
@@ -148,6 +148,15 @@ func (w *BagFileStreamingWriter) OpenChunk(
 	w.chunkInfo.ChunkPosition = hintOffset
 
 	err = w.writeChunkHeader(hintUncompressedSize, hintCompressedSize)
+
+	if w.compressionMethod == CompressionLZ4 {
+		_, err = w.file.Write([]byte{0x04, 0x22, 0x4d, 0x18, 0x64, 0x60, 0x85})
+		if err != nil {
+			panic(err)
+		}
+	}
+	w.chunkUncompressedSize += 7
+	w.chunkCompressedSize += 7
 	return
 }
 
@@ -158,6 +167,7 @@ func (w *BagFileStreamingWriter) RewriteChunkHeader(
 }
 
 func (w *BagFileStreamingWriter) writeConnectionRecord(
+	writer io.Writer,
 	connectionId uint32, topicClass *RosTopicClassType,
 ) (writeLength int, err error) {
 	headerHeader, err := NewRecordHeader(
@@ -170,7 +180,7 @@ func (w *BagFileStreamingWriter) writeConnectionRecord(
 	}
 	var headerLength int
 	var bodyLength int
-	if headerLength, err = writeHeader(w.file, headerHeader); err != nil {
+	if headerLength, err = writeHeader(writer, headerHeader); err != nil {
 		return
 	}
 
@@ -183,7 +193,7 @@ func (w *BagFileStreamingWriter) writeConnectionRecord(
 	if err != nil {
 		return
 	}
-	if bodyLength, err = writeHeader(w.file, bodyHeader); err != nil {
+	if bodyLength, err = writeHeader(writer, bodyHeader); err != nil {
 		return
 	}
 	writeLength = headerLength + bodyLength
@@ -226,13 +236,16 @@ func (w *BagFileStreamingWriter) WriteMessage(
 	if !w.chunkOpened {
 		return ErrorChunkNotOpened
 	}
+	if w.compressionMethod != CompressionNone {
+		return ErrorInvalidCompressionMethod
+	}
 	connectionId := w.connectionIdGenerator.GetUint32Id(topicClass.Topic)
 	var writeLength int
 
 	if _, has := w.allConnectionInfo[connectionId]; !has {
 		tmpTopicClass := *topicClass
 		w.allConnectionInfo[connectionId] = &tmpTopicClass
-		writeLength, err = w.writeConnectionRecord(connectionId, &tmpTopicClass)
+		writeLength, err = w.writeConnectionRecord(w.file, connectionId, &tmpTopicClass)
 		if err != nil {
 			return
 		}
@@ -254,13 +267,130 @@ func (w *BagFileStreamingWriter) WriteMessage(
 	return
 }
 
+func (w *BagFileStreamingWriter) WriteRawMessage(
+	timestampNs uint64, topicClass *RosTopicClassType,
+	compressedMessageBody []byte, originalSize uint32,
+) (err error) {
+	if !w.chunkOpened {
+		return ErrorChunkNotOpened
+	}
+	if w.compressionMethod != CompressionLZ4 {
+		return ErrorInvalidCompressionMethod
+	}
+	connectionId := w.connectionIdGenerator.GetUint32Id(topicClass.Topic)
+	var writeLength int
+
+	if _, has := w.allConnectionInfo[connectionId]; !has {
+		tmpTopicClass := *topicClass
+		w.allConnectionInfo[connectionId] = &tmpTopicClass
+		var buffer bytes.Buffer
+		writeLength, err = w.writeConnectionRecord(&buffer, connectionId, &tmpTopicClass)
+		if err != nil {
+			return
+		}
+		if writeLength != buffer.Len() {
+			panic("buffer len not equal to connection function len.")
+		}
+		uncompressedSize := writeLength
+		compressedSize := 4 + writeLength
+		err = binary.Write(w.file, binary.LittleEndian, uint32(uncompressedSize) | 0x80000000)
+		if err != nil {
+			panic(err)
+		}
+		_, err = w.file.Write(buffer.Bytes())
+		if err != nil {
+			panic(err)
+		}
+		
+		// w.updateChunkLength(writeLength)
+		w.chunkCompressedSize += uint32(compressedSize)
+		w.chunkUncompressedSize += uint32(uncompressedSize)
+	}
+
+	w.updateChunkInfo(connectionId, timestampNs, w.chunkCompressedSize)
+	// TODO: do not support compression now.
+	msgHeader, err := NewRecordHeader(
+		KeyOp, OpMsgData,
+		KeyConnectionID, connectionId,
+		KeyTime, packTimeInV200(timestampNs),
+	)
+	var buffer bytes.Buffer
+	// writeLength, err = writeRecord(w.file, msgHeader, compressedMessageBody, 0)
+	headerLen, err := writeHeader(&buffer, msgHeader) 
+	if err != nil {
+		return
+	}
+	if headerLen != buffer.Len() {
+		panic("buffer len not equal to message function len.")
+	}
+	err = binary.Write(w.file, binary.LittleEndian, uint32(headerLen) | 0x80000000)
+	if err != nil {
+		panic(err)
+	}
+	w.file.Write(buffer.Bytes())
+	if originalSize == 0 {
+		var bodyBuffer bytes.Buffer
+		bodyLen, err := writeSized(&bodyBuffer, compressedMessageBody)
+		if err != nil {
+			panic(err)
+		}
+		err = binary.Write(w.file, binary.LittleEndian, uint32(bodyLen) | 0x80000000)
+		if err != nil {
+			panic(err)
+		}
+		_, err = w.file.Write(bodyBuffer.Bytes())
+		if err != nil {
+			panic(err)
+		}
+
+		uncompressedSize := uint32(headerLen + bodyLen)
+		compressedSize := uint32(headerLen + 4 + bodyLen + 4)
+		// w.updateChunkLength(writeLength)
+		w.chunkCompressedSize += uint32(compressedSize)
+		w.chunkUncompressedSize += uint32(uncompressedSize)
+
+
+	} else {
+		err = binary.Write(w.file, binary.LittleEndian, uint32(len(compressedMessageBody[4:])) | 0x80000000)
+		if err != nil {
+			panic(err)
+		}
+		_, err := writeSized(w.file, compressedMessageBody[4:])
+		if err != nil {
+			panic(err)
+		}
+
+		uncompressedSize := uint32(headerLen) + originalSize
+		compressedSize := headerLen + 4 + len(compressedMessageBody)
+		// w.updateChunkLength(writeLength)
+		w.chunkCompressedSize += uint32(compressedSize)
+		w.chunkUncompressedSize += uint32(uncompressedSize)
+	}
+	
+	// w.updateChunkLength(writeLength)
+	return
+}
+
 func (w *BagFileStreamingWriter) ChunkInfo() (*ChunkInfoType, uint32, uint32) {
 	return w.chunkInfo, w.chunkCompressedSize, w.chunkUncompressedSize
 }
 
-func (w *BagFileStreamingWriter) CloseChunk() (err error) {
+func (w *BagFileStreamingWriter) CloseChunk(checksum uint32) (err error) {
 	if !w.chunkOpened {
 		return ErrorChunkNotOpened
+	}
+
+	if w.compressionMethod == CompressionLZ4 {
+		_, err = w.file.Write([]byte{0,0,0,0})
+		if err != nil {
+			panic(err)
+		}
+		err = binary.Write(w.file, binary.LittleEndian, checksum)
+		if err != nil {
+			panic(err)
+		}
+		w.chunkUncompressedSize += 8
+		w.chunkCompressedSize += 8
 	}
 
 	w.chunkOpened = false
@@ -277,8 +407,14 @@ func (w *BagFileStreamingWriter) CloseChunk() (err error) {
 		}
 		var buffer bytes.Buffer
 		for _, index := range indexes {
-			binary.Write(&buffer, binary.LittleEndian, packTimeInV200(index.TimestampNs))
-			binary.Write(&buffer, binary.LittleEndian, index.Offset)
+			err = binary.Write(&buffer, binary.LittleEndian, packTimeInV200(index.TimestampNs))
+			if err != nil {
+				panic(err)
+			}
+			err = binary.Write(&buffer, binary.LittleEndian, index.Offset)
+			if err != nil {
+				panic(err)
+			}
 		}
 		_, err = writeRecord(w.file, indexHeader, buffer.Bytes(), 0)
 		if err != nil {
@@ -324,7 +460,7 @@ func (w *BagFileStreamingWriter) FinishWrite() (err error) {
 	}
 	w.writeFinished = true
 	for connectionId, topicClass := range w.allConnectionInfo {
-		_, err = w.writeConnectionRecord(connectionId, topicClass)
+		_, err = w.writeConnectionRecord(w.file, connectionId, topicClass)
 		if err != nil {
 			return
 		}

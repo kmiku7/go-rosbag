@@ -21,6 +21,17 @@ type Compressor interface {
 	Decompress(compressedData []byte) ([]byte, error)
 }
 
+func NewCompressor(method CompressionMethodType) (Compressor, error) {
+	switch method {
+	case CompressionNone:
+		return NewPlainCompressor(), nil
+	case CompressionLZ4:
+		return nil, nil
+	default:
+		return nil, ErrorInvalidCompressionMethod
+	}
+}
+
 type PlainCompressor struct {
 	name CompressionMethodType
 }
@@ -37,13 +48,4 @@ func (c *PlainCompressor) Compress(originalData []byte) ([]byte, error) {
 
 func (c *PlainCompressor) Decompress(compressedData []byte) ([]byte, error) {
 	return compressedData, nil
-}
-
-func NewCompressor(method CompressionMethodType) (Compressor, error) {
-	switch method {
-	case CompressionNone:
-		return NewPlainCompressor(), nil
-	default:
-		return nil, ErrorInvalidCompressionMethod
-	}
 }
