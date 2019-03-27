@@ -71,7 +71,7 @@ func writeRecord(
 	}
 
 	if paddedSize > 0 {
-		if headerLength < int(paddedSize + 4) {
+		if headerLength < int(paddedSize+4) {
 			data = bytes.Repeat([]byte{' '}, int(paddedSize+4)-headerLength)
 		} else {
 			data = nil
