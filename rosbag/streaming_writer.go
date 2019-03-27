@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
+
+	"github.com/OneOfOne/xxhash"
 )
 
 type BagFileStreamingWriter struct {
@@ -24,6 +26,8 @@ type BagFileStreamingWriter struct {
 
 	connectionIdGenerator *IdGenerator
 	allConnectionInfo     map[uint32]*RosTopicClassType
+
+	hasher *xxhash.XXHash32
 }
 
 func NewBagFileStreamingWriter(
@@ -53,6 +57,8 @@ func NewBagFileStreamingWriter(
 
 		connectionIdGenerator: NewIdGenerator(),
 		allConnectionInfo:     make(map[uint32]*RosTopicClassType),
+
+		hasher: xxhash.New32(),
 	}
 	return
 }
@@ -268,7 +274,7 @@ func (w *BagFileStreamingWriter) WriteMessage(
 
 func (w *BagFileStreamingWriter) WriteRawMessage(
 	timestampNs uint64, topicClass *RosTopicClassType,
-	compressedMessageBody []byte, originalSize uint32,
+	compressedMessageBody []byte, originalSize uint32, originalMessageBody []byte,
 ) (err error) {
 	if !w.chunkOpened {
 		return ErrorChunkNotOpened
@@ -292,6 +298,7 @@ func (w *BagFileStreamingWriter) WriteRawMessage(
 		}
 		uncompressedSize := writeLength
 		compressedSize := 4 + writeLength
+		w.hasher.Write(buffer.Bytes())
 		err = binary.Write(w.file, binary.LittleEndian, uint32(uncompressedSize)|0x80000000)
 		if err != nil {
 			panic(err)
@@ -342,6 +349,7 @@ func (w *BagFileStreamingWriter) WriteRawMessage(
 		if err != nil {
 			panic(err)
 		}
+		w.hasher.Write(headerBuffer.Bytes())
 		_, err = w.file.Write(headerBuffer.Bytes())
 		if err != nil {
 			panic(err)
@@ -351,6 +359,7 @@ func (w *BagFileStreamingWriter) WriteRawMessage(
 		if err != nil {
 			panic(err)
 		}
+		w.hasher.Write(compressedMessageBody)
 		_, err = w.file.Write(compressedMessageBody)
 		if err != nil {
 			panic(err)
@@ -375,6 +384,7 @@ func (w *BagFileStreamingWriter) WriteRawMessage(
 		if err != nil {
 			panic(err)
 		}
+		w.hasher.Write(headerBuffer.Bytes())
 		_, err = w.file.Write(headerBuffer.Bytes())
 		if err != nil {
 			panic(err)
@@ -384,6 +394,7 @@ func (w *BagFileStreamingWriter) WriteRawMessage(
 		if err != nil {
 			panic(err)
 		}
+		w.hasher.Write(originalMessageBody)
 		_, err = w.file.Write(compressedMessageBody[4:])
 		if err != nil {
 			panic(err)
@@ -415,7 +426,8 @@ func (w *BagFileStreamingWriter) CloseChunk(checksum uint32) (err error) {
 		if err != nil {
 			panic(err)
 		}
-		err = binary.Write(w.file, binary.LittleEndian, checksum)
+		_ = checksum
+		err = binary.Write(w.file, binary.LittleEndian, w.hasher.Sum32())
 		if err != nil {
 			panic(err)
 		}
